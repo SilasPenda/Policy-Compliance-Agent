@@ -1,4 +1,4 @@
-# Policy_Compliant_Agent
+# Policy_Compliance_Agent
 
 A smart AI-powered Compliance Auditor Assistant designed to analyze documents, extract relevant compliance information, and determine whether they meet specified policy standards such as GDPR. This tool leverages embeddings, similarity search, and LLMs to provide detailed compliance assessments based on custom policies and similar documents.
 
@@ -39,9 +39,8 @@ A smart AI-powered Compliance Auditor Assistant designed to analyze documents, e
 1. Clone the repository:
 
    ```bash
-   git clone
-   https://github.com/SilasPenda/Policy-Compliant-Agent.git
-   cd Policy-Compliance-Agent
+   git clone https://github.com/SilasPenda/Policy-Compliance-Agent
+   cd policy-compliance-auditor
 
 2. Create & activate virtual environment:
 
@@ -56,19 +55,22 @@ A smart AI-powered Compliance Auditor Assistant designed to analyze documents, e
    python -m pip install --upgrade pip
    pip install -r requirements.txt
 
-4. Create .env file and add necessary secrets (API/Database access keys, secret variables, etc"
+4. Create .env file and add OPEN_AI_KEY
 
-5. Create contract & policy embeddings and store in Qdrant vector database
+5. Create collections for contracts:
    ```bash
-   python ingestion/contract_ingestor.py
-   python ingestion/policy_ingestor.py
+      python ingestion/contract_ingestor.py
 
-6. Start API
+6. Create collections for policies:
+   ```bash
+      python ingestion/policy_ingestor.py
+
+7. Launch API
 
    ```bash
-   python deployment/api.py
-   
-7. Start App
+   uvicorn deployment.api:app --reload
+
+8. Start App
 
    ```bash
    python deployment/app.py

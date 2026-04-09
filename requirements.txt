@@ -166,7 +166,8 @@ python-multipart==0.0.20
 pytz==2025.2
 PyYAML==6.0.2
 pyzmq==27.0.0
-qdrant-client==1.15.1
+qdrant-client==1.17.0
+redis==7.4.0
 referencing==0.36.2
 regex==2024.11.6
 requests==2.32.4

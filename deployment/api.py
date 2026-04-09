@@ -1,76 +1,88 @@
-import os
-import sys
-sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
+import json
+import numpy as np
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
-import tempfile
-from flask import Flask, request, jsonify
-
-from src.utils import read_pdf, compute_confidence
+from src.utils import get_embedding_model, read_pdf, compute_confidence, redis_client_connect
+from src.schemas import Compliance, HistoryResponse, RetrieveHistory
 from agent.templates import parser
 from agent.reasoning import create_compliance_agent
 
-
-app = Flask(__name__)
-
-def run_agent(agent_executor, query, pdf_path):
-    document_pages = read_pdf(pdf_path)
-    texts = [
-        page.extract_text()
-        for page in document_pages
-        if page.extract_text()
-    ]
-
-    if not texts:
-        return jsonify({"error": "No text extracted from PDF"}), 400
-
-    full_text = "\n\n".join(texts)
-
-    response = agent_executor.invoke(
-        {
-            "query": query,
-            "chunk": full_text,
-        }
-    )
-
-    structured_response = parser.parse(response.get("output"))
-
-    return structured_response
+from dotenv import load_dotenv
+load_dotenv()
 
 
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({"status": "ok"}), 200
 
+app = FastAPI(title="Policy Compliance API")
 
-@app.route("/compliance/check", methods=["POST"])
-def process():
+app = FastAPI(
+    title="Policy Compliance API",
+    description="This is the first version of Policy Compliance API",
+    version="1.0.0"
+)
+
+redis = redis_client_connect()
+
+# --- Health check ---
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+def cosine_similarity(vec1, vec2):
+    dot_product = np.dot(vec1, vec2)
+    norm_vec1 = np.linalg.norm(vec1)
+    norm_vec2 = np.linalg.norm(vec2)
+    return dot_product / (norm_vec1 * norm_vec2)
+
+def find_similar_query_embedding(new_emb, session_id, threshold=0.88):
     """
-    Accepts:
-    - multipart/form-data:
-        - file: PDF
-        - query: string
+    Check Redis for similar queries in the same session.
+    Returns the cached response if similarity >= threshold.
     """
+    keys = redis.lrange(session_id, 0, -1)
+    for key_bytes in keys:
+        key_data = json.loads(key_bytes)
+        past_emb = key_data.get("embedding")
+        if past_emb:
+            similarity = cosine_similarity(np.array(new_emb), np.array(past_emb))
+            if similarity >= threshold:
+                return key_data["response"]
+    return None
 
+@app.post("/compliance/check")
+async def compliance_check(check_info: Compliance):
     try:
+        # --- Step 1: Compute embedding for new query ---
+        embedding_model = get_embedding_model()
+
+        query_embedding = embedding_model.encode(check_info.query).tolist()
+
+        # --- Step 2: Check Redis for a semantically similar previous query ---
+        existing_response = None
+        existing_response = find_similar_query_embedding(query_embedding, check_info.session_id)
+
+        if existing_response:
+            # Found similar query, return cached response
+            return JSONResponse(content=existing_response)
+
+        # --- Step 3: No similar query, call the agent ---
         agent_executor = create_compliance_agent(llm_type="openai", model_name="gpt-4o")
-        if "file" not in request.files:
-            return jsonify({"error": "PDF file is required"}), 400
 
-        pdf_file = request.files["file"]
-        query = request.form.get("query")
+        # Invoke agent
+        response = agent_executor.invoke({
+            "query": check_info.query,
+            "chunk": check_info.pdf_text,
+            "agent_scratchpad": ""
+        })
 
-        if not query:
-            return jsonify({"error": "Query is required"}), 400
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            pdf_file.save(tmp.name)
-            pdf_path = tmp.name
-
-        structured_response = run_agent(agent_executor, query, pdf_path)
+        structured_response = parser.parse(response.get("output"))
         confidence_score = compute_confidence(structured_response)
 
-        return jsonify(
-            {
+        # --- Step 4: Store response + embedding in Redis ---
+        entry = {
+            "query": check_info.query,
+            "embedding": query_embedding,
+            "response": {
                 "verdict": structured_response.compliance_status,
                 "compliant_policies": structured_response.compliant_policies,
                 "violated_policies": structured_response.violated_policies,
@@ -79,26 +91,32 @@ def process():
                 "reasoning": structured_response.reasoning,
                 "confidence": confidence_score,
             }
-        ), 200
+        }
+        redis.rpush(check_info.session_id, json.dumps(entry))
+        redis.expire(check_info.session_id, check_info.ttl)
+
+        # --- Step 5: Return structured JSON ---
+        return JSONResponse(content={
+            "verdict": structured_response.compliance_status,
+            "compliant_policies": structured_response.compliant_policies,
+            "violated_policies": structured_response.violated_policies,
+            "tools_used": structured_response.tools_used,
+            "similar_documents": structured_response.similar_documents,
+            "reasoning": structured_response.reasoning,
+            "confidence": confidence_score,
+        })
 
     except Exception as e:
-        return jsonify(
-            {
+        return JSONResponse(
+            status_code=500,
+            content={
                 "verdict": "unknown",
-                "policies": [],
+                "compliant_policies": [],
+                "violated_policies": [],
                 "tools_used": [],
                 "similar_documents": [],
                 "reasoning": "",
                 "confidence": 0.0,
                 "error": str(e),
             }
-        ), 500
-
-    finally:
-        if "pdf_path" in locals() and os.path.exists(pdf_path):
-            os.remove(pdf_path)
-
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=False)
+        )

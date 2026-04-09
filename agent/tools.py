@@ -49,60 +49,35 @@ chunk_embedding_tool = Tool(
     description="Create embeddings for text chunks extracted from PDF pages using RecursiveCharacterTextSplitter. "
 )
 
-
-def find_matching_policies(query: str, top_k: int=3):
+def query_embeddings(collection_name: str, query: str, top_k: int = 3):
     """
-    Tool to find matching policies based on a query using embeddings.
+    Generic embedding-based retrieval function for any Qdrant collection.
+    
     Args:
-        query (str): The query to find matching policies for.
-        top_k (int): The number of top matching policies to return.
+        collection_name (str): Name of the Qdrant collection to search.
+        query (str): The text query to retrieve embeddings for.
+        top_k (int): Number of top results to return.
     """
-
-    client = db_client_connect(policy_collection)
-
+    client = db_client_connect(collection_name)
     query_embedding = embedding_model.encode(query).tolist()
 
-    results = client.search(
-        collection_name=policy_collection,
-        query_vector=query_embedding,
+    results = client.query_points(
+        collection_name=collection_name,
+        query=query_embedding,
         limit=top_k,
-        with_payload=True,
+        with_payload=True
     )
 
     return results
 
 matching_policy_tool = Tool(
     name="find_matching_policies",
-    func=find_matching_policies,
+    func=lambda query, top_k=3: query_embeddings(policy_collection, query, top_k),
     description="Find matching policies based on a query using embeddings. Returns top K matching policies with their documents and metadata."
 )
 
-
-def find_similar_documents(query: str, top_k: int=3):
-    """
-    Tool to find similar documents based on a query and policies to give more context to back up answer.
-    
-    Args:
-        query (str): The query to find similar documents for.
-        top_k (int): The number of top similar documents to return.
-    """
-    
-    client = db_client_connect(contract_collection)
-    # q_embedding = model.encode([query])[0]
-    query_embedding = embedding_model.encode(query).tolist()
-
-    results = client.search(
-        collection_name=contract_collection,
-        query_vector=query_embedding,
-        limit=top_k,
-        with_payload=True,
-    )
-
-    return results
-
-
 similar_document_tool = Tool(
     name="find_similar_documents",
-    func=find_similar_documents,
+    func=lambda query, top_k=3: query_embeddings(contract_collection, query, top_k),
     description="Find similar documents based on a query and policies to give more context to back up answer. Returns top K similar documents with their metadata."
 )

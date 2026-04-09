@@ -38,12 +38,12 @@ system_prompt = ChatPromptTemplate.from_messages(
                - Endorsement, sponsorship, or exclusivity conditions
                - Third-party relationships (e.g., distributors, licensees)
                - Prohibited actions and rights limitations
-            3. Identify all policies that may apply using `find_matching_policies`:
+            3. Identify all policies that may apply using `find_matching_policies` tool:
                - Consider contract type, policy domain, severity, and category
             4. Compare the document clauses against each policy:
                - Decide step by step if each policy is satisfied or violated
                - Note which clauses support your assessment
-            5. Optionally, use `find_similar_documents` to find analogies that clarify compliance
+            5. Use `find_similar_documents` tool to find analogies that clarify compliance
             6. Summarize your reasoning clearly for each policy in a logical, stepwise manner
             7. Finally, fill the JSON object fields:
                - `compliant_policies`

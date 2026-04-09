@@ -10,6 +10,8 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics import r2_score
 from sklearn.model_selection import GridSearchCV
 
+import redis
+
 from langchain_ollama import OllamaLLM
 from langchain_openai import ChatOpenAI
 
@@ -32,6 +34,11 @@ os.environ["OPENAI_API_KEY"]
 openai_api_key = os.getenv("OPENAI_API_KEY")
 qdrant_url = os.getenv("QDRANT_URL")
 qdrant_api_key = os.getenv("QDRANT_API_KEY")
+
+redis_host = os.getenv("REDIS_HOST")
+redis_port = int(os.getenv("REDIS_PORT"))
+redis_username = os.getenv("REDIS_USERNAME")
+redis_password = os.getenv("REDIS_PASSWORD")
 
 
 def read_pdf(file_path):
@@ -119,6 +126,36 @@ def get_llm(type="openai", model_name="gpt-4o"):
     llm = llms[type]
 
     return llm
+
+
+def redis_client_connect():
+    """
+    Connect to a Redis client.
+
+    Args:
+        host (str): Redis host.
+        port (int): Redis port.
+        username (str): Redis username.
+        password (str): Redis password.
+
+    Returns:
+        Redis: Connected Redis client instance.
+    """
+
+    try:
+        r = redis.Redis(
+            host=redis_host,
+            port=redis_port,
+            decode_responses=True,
+            username=redis_username,
+            password=redis_password,
+        )
+
+        return r
+
+    except Exception as e:
+        print(f"Error connecting to Redis: {e}")
+        return None
 
 
 def db_client_connect(collection_name: str, vector_size: int = 384):

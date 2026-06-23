@@ -2,6 +2,12 @@
 
 A smart AI-powered Compliance Auditor Assistant designed to analyze documents, extract relevant compliance information, and determine whether they meet specified policy standards such as GDPR. This tool leverages embeddings, similarity search, and LLMs to provide detailed compliance assessments based on custom policies and similar documents.
 
+
+
+https://github.com/user-attachments/assets/f20a82ee-80ad-4f7c-9cf5-61ad87db7d3f
+
+
+
 ---
 
 ## Features
